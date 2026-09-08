@@ -1029,6 +1029,8 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
           {points.map((point, index) => (
             <g
               key={`hit-${point.month}`}
+              // The focused value card already indicates selection; do not outline the full-height hit area.
+              style={{ outline: "none" }}
               tabIndex={0}
               role="button"
               aria-label={`${point.monthNumber}月，淨資產 ${money(point.netAssets)} 元`}
