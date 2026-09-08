@@ -2,6 +2,7 @@ import { buildDeterministicHealthCheck } from '../lib/health-check';
 
 type Settings = { clientId: string; spreadsheetId: string; baseline: number };
 const SETTINGS_KEY = 'smwl-pages-google-settings';
+const SESSION_KEY = 'smwl-pages-google-session';
 let settings: Settings = { clientId: '', spreadsheetId: '', baseline: 0 };
 let token = '';
 let expiresAt = 0;
@@ -22,6 +23,25 @@ export function configureGoogle(input: Settings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
 }
 export function backupKey() { return `smwl-pages-assets-backup:${settings.spreadsheetId}`; }
+// Tab-scoped storage survives reload, without persisting the token in localStorage.
+function saveGoogleSession() {
+  try { sessionStorage.setItem(SESSION_KEY, JSON.stringify({ token, expiresAt, clientId: settings.clientId, spreadsheetId: settings.spreadsheetId })); } catch { /* Memory-only login still works when storage is blocked. */ }
+}
+function clearGoogleSession() {
+  token = ''; expiresAt = 0;
+  try { sessionStorage.removeItem(SESSION_KEY); } catch { /* Storage may be blocked. */ }
+}
+export function restoreGoogleSession(): boolean {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) || 'null');
+    if (!saved || saved.clientId !== settings.clientId || saved.spreadsheetId !== settings.spreadsheetId ||
+        typeof saved.token !== 'string' || !saved.token || !Number.isFinite(saved.expiresAt) || saved.expiresAt <= Date.now()) {
+      clearGoogleSession(); return false;
+    }
+    token = saved.token; expiresAt = saved.expiresAt;
+    return true;
+  } catch { clearGoogleSession(); return false; }
+}
 export function connectGoogle(): Promise<void> {
   const google = (window as unknown as { google?: { accounts: { oauth2: { initTokenClient: (options: Record<string, unknown>) => { requestAccessToken: (options: Record<string, unknown>) => void } } } } }).google;
   if (!google) return Promise.reject(new Error('Google 登入服務尚未載入，請稍後再按連接。'));
@@ -33,6 +53,7 @@ export function connectGoogle(): Promise<void> {
         if (response.error || !response.access_token) { reject(new Error('Google 授權未完成。')); return; }
         token = response.access_token;
         expiresAt = Date.now() + Math.max(0, Number(response.expires_in || 3600) - 60) * 1000;
+        saveGoogleSession();
         resolve();
       },
       error_callback: () => reject(new Error('Google 登入視窗未完成，請再按「連接 Google」。')),
@@ -42,7 +63,7 @@ export function connectGoogle(): Promise<void> {
 }
 
 async function sheets(path: string, options: RequestInit = {}, signal?: AbortSignal) {
-  if (!token || Date.now() >= expiresAt) throw new Error('Google 授權已到期，請按上方「重新連接 Google」；目前資料不會被清除。');
+  if (!token || Date.now() >= expiresAt) { clearGoogleSession(); throw new Error('Google 授權已到期，請按「重新連接 Google」；目前資料不會被清除。'); }
   let response!: Response;
   const attempts = !options.method || options.method === 'GET' ? 3 : 1;
   for (let attempt = 0; attempt < attempts; attempt++) {
@@ -58,7 +79,7 @@ async function sheets(path: string, options: RequestInit = {}, signal?: AbortSig
     }
     if (attempt < attempts - 1) await new Promise(resolve => setTimeout(resolve, 500 * 2 ** attempt));
   }
-  if (response.status === 401) { token = ''; throw new Error('Google 授權已到期，請重新連接 Google。'); }
+  if (response.status === 401) { clearGoogleSession(); throw new Error('Google 授權已到期，請重新連接 Google。'); }
   if (response.status === 403) throw new Error('目前 Google 帳號沒有試算表權限，或尚未啟用 Google Sheets API。');
   if (response.status === 429) throw new Error('Google 暫時限制讀取頻率，請稍後重試；原資料已保留。');
   if (!response.ok) throw new Error(`Google 試算表操作失敗（${response.status}）；原資料已保留。`);

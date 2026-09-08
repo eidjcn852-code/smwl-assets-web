@@ -9,6 +9,28 @@ const health = dataUrl(transpile(await readFile(new URL('../lib/health-check.ts'
 const source = (await readFile(new URL('../pages-src/google-sheets.ts', import.meta.url), 'utf8')).replace("'../lib/health-check'", JSON.stringify(health));
 const api = await import(dataUrl(transpile(source)));
 
+test('reload restores only an unexpired session for the same database; rejected tokens are removed', async () => {
+  const storage = new Map();
+  globalThis.sessionStorage = { getItem: k => storage.get(k), setItem: (k,v) => storage.set(k,v), removeItem: k => storage.delete(k) };
+  globalThis.localStorage = { getItem: () => null, setItem: () => {} };
+  globalThis.window = { google: { accounts: { oauth2: { initTokenClient: options => ({ requestAccessToken: () => options.callback({access_token:'session-test-token',expires_in:3600}) }) } } } };
+  api.configureGoogle({clientId:'test.apps.googleusercontent.com',spreadsheetId:'session_sheet_1234567890',baseline:100});
+  await api.connectGoogle();
+  assert.equal(api.restoreGoogleSession(), true);
+  const key = 'smwl-pages-google-session';
+  const saved = JSON.parse(storage.get(key));
+  storage.set(key,JSON.stringify({...saved,expiresAt:Date.now()-1}));
+  assert.equal(api.restoreGoogleSession(),false);
+  assert.equal(storage.has(key),false);
+  storage.set(key,JSON.stringify({...saved,spreadsheetId:'another_sheet_1234567890'}));
+  assert.equal(api.restoreGoogleSession(),false);
+  storage.set(key,JSON.stringify(saved));
+  assert.equal(api.restoreGoogleSession(),true);
+  globalThis.fetch=async()=>new Response('',{status:401});
+  assert.equal((await api.pagesFetch('/api/cloud')).status,503);
+  assert.equal(storage.has(key),false);
+});
+
 test('invalid cache never supplies zero or fabricated prices', () => {
   const rows = [['TPE:2330', 'formula', 100, '2026-09-08T01:00:00Z'], ['TPE:0056', '', '#N/A', '']];
   const quotes = api.parseQuotes(rows, ['TPE:2330', 'TPE:0056', 'MISSING'], Date.parse('2026-09-08T01:05:00Z'));

@@ -1298,7 +1298,7 @@ function HealthCheckPanel({
   );
 }
 
-export default function Home({ baseline }: { baseline: number }) {
+export default function Home({ baseline, reconnectGoogle, googleBusy, googleMessage }: { baseline: number; reconnectGoogle: () => Promise<void>; googleBusy: boolean; googleMessage: string }) {
   BASE_ASSET_2025 = baseline;
   const [sm, setSm] = useState<Account>(fallbackSm);
   const [wl, setWl] = useState<Account>(fallbackWl);
@@ -1749,8 +1749,13 @@ export default function Home({ baseline }: { baseline: number }) {
               {sync === "saving" ? <LoaderCircle className="spin" size={19} /> : <Save size={19} />}
               {sync === "saving" ? "儲存中…" : sync === "success" ? "已完成" : sync === "error" ? "操作失敗" : "儲存至試算表"}
             </button>
+            <button type="button" onClick={() => void reconnectGoogle()} disabled={googleBusy || sync === "saving" || quoteLoading} className="action-button border border-slate-200 bg-white text-slate-700 hover:bg-slate-50">
+              {googleBusy ? <LoaderCircle className="spin" size={19} /> : <RefreshCw size={19} />}
+              <span>{googleBusy ? "Google 連接中…" : "重新連接 Google"}</span>
+            </button>
           </div>
         </header>
+        {googleMessage && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{googleMessage}</p>}
 
         {quoteStatus && (
           <div
