@@ -837,6 +837,10 @@ function AccountPanel({
 
 function TrendChart({ data }: { data: HistoryPoint[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+  const [leverageInfo, setLeverageInfo] = useState<{
+    index: number;
+    kind: "withProperty" | "withoutProperty";
+  } | null>(null);
   const sorted = [...data].sort((a, b) => a.month.localeCompare(b.month));
   const latest = sorted.at(-1)?.netAssets ?? 0;
   const previous = sorted.at(-2)?.netAssets ?? BASE_ASSET_2025;
@@ -870,6 +874,30 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
     : "";
   const hoveredPoint =
     hoveredIndex === null ? null : points[hoveredIndex] ?? null;
+  const labelLayout = (point: (typeof points)[number]) => {
+    const showLeverage = point.month >= "2026-09";
+    const labelWidth = showLeverage ? 118 : 96;
+    const labelHeight = showLeverage ? 84 : 63;
+    const labelX = Math.max(
+      2,
+      Math.min(width - labelWidth - 2, point.x - labelWidth / 2),
+    );
+    return {
+      showLeverage,
+      labelWidth,
+      labelHeight,
+      labelX,
+      labelY: Math.max(8, point.y - labelHeight - 21),
+    };
+  };
+  const toggleLeverageInfo = (
+    index: number,
+    kind: "withProperty" | "withoutProperty",
+  ) => {
+    setLeverageInfo((current) =>
+      current?.index === index && current.kind === kind ? null : { index, kind },
+    );
+  };
 
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -951,15 +979,9 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
           {area && <polygon points={area} fill="url(#assetArea)" />}
           {line && <polyline points={line} fill="none" stroke="#3b82f6" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />}
           {points.map((point, index) => {
-            const labelWidth = 112;
-            const showLeverage = point.month >= "2026-09";
-            const labelHeight = showLeverage ? 82 : 63;
-            const labelX = Math.max(
-              2,
-              Math.min(width - labelWidth - 2, point.x - labelWidth / 2),
-            );
+            const { showLeverage, labelWidth, labelHeight, labelX, labelY } =
+              labelLayout(point);
             // Keep the card visually connected to its point without touching the line.
-            const labelY = Math.max(8, point.y - labelHeight - 21);
             const isHovered = hoveredIndex === index;
             return (
               <g key={point.month}>
@@ -1006,9 +1028,6 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
                 {showLeverage && (
                   <g>
                     <line x1={labelX + 3} x2={labelX + labelWidth - 3} y1={labelY + 62} y2={labelY + 62} stroke="#e2e8f0" />
-                    <text x={labelX + labelWidth / 2} y={labelY + 75} textAnchor="middle" fontSize="9" fontWeight="400" fill="#334155">
-                      含房{leverageText(point.leverageWithProperty)}　不含房{leverageText(point.leverageWithoutProperty)}
-                    </text>
                   </g>
                 )}
                 <circle
@@ -1055,6 +1074,88 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
               />
             </g>
           ))}
+          {points.map((point, index) => {
+            const { showLeverage, labelWidth, labelX, labelY } = labelLayout(point);
+            if (!showLeverage) return null;
+            const withActive = leverageInfo?.index === index && leverageInfo.kind === "withProperty";
+            const withoutActive = leverageInfo?.index === index && leverageInfo.kind === "withoutProperty";
+            const popupWidth = 390;
+            const popupHeight = leverageInfo?.kind === "withProperty" ? 48 : 54;
+            const popupX = Math.max(2, Math.min(width - popupWidth - 2, point.x - popupWidth / 2));
+            const popupY = Math.max(6, labelY - popupHeight - 10);
+            const activate = (kind: "withProperty" | "withoutProperty") =>
+              toggleLeverageInfo(index, kind);
+            return (
+              <g key={`leverage-${point.month}`}>
+                <text x={labelX + 4} y={labelY + 77} fontSize="8.5" fontWeight="500" fill="#64748b">
+                  槓桿
+                </text>
+                <g
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`房產視為風險資產，槓桿 ${leverageText(point.leverageWithProperty)}。點選查看計算說明。`}
+                  aria-pressed={withActive}
+                  style={{ cursor: "pointer", outline: "none" }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    activate("withProperty");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      activate("withProperty");
+                    }
+                  }}
+                >
+                  <rect x={labelX + 27} y={labelY + 65} width="38" height="16" rx="4" fill={withActive ? "#dbeafe" : "#eff6ff"} stroke={withActive ? "#2563eb" : "transparent"} />
+                  <text x={labelX + 46} y={labelY + 77} textAnchor="middle" fontSize="8.5" fontWeight="600" fill="#1e3a5f">
+                    {leverageText(point.leverageWithProperty)}
+                  </text>
+                </g>
+                <text x={labelX + 69} y={labelY + 77} textAnchor="middle" fontSize="9" fill="#64748b">/</text>
+                <g
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`房產視同現金，槓桿 ${leverageText(point.leverageWithoutProperty)}。點選查看計算說明。`}
+                  aria-pressed={withoutActive}
+                  style={{ cursor: "pointer", outline: "none" }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    activate("withoutProperty");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      activate("withoutProperty");
+                    }
+                  }}
+                >
+                  <rect x={labelX + 74} y={labelY + 65} width="41" height="16" rx="4" fill={withoutActive ? "#dbeafe" : "#eff6ff"} stroke={withoutActive ? "#2563eb" : "transparent"} />
+                  <text x={labelX + 94.5} y={labelY + 77} textAnchor="middle" fontSize="8.5" fontWeight="600" fill="#1e3a5f">
+                    {leverageText(point.leverageWithoutProperty)}
+                  </text>
+                </g>
+                {(withActive || withoutActive) && (
+                  <g pointerEvents="none" role="status" aria-live="polite">
+                    <rect x={popupX} y={popupY} width={popupWidth} height={popupHeight} rx="9" fill="white" stroke="#cbd5e1" strokeWidth="1.2" />
+                    {withActive ? (
+                      <text x={popupX + 12} y={popupY + 20} fontSize="12" fontWeight="500" fill="#0f172a">
+                        <tspan x={popupX + 12}>房產視為風險資產：金融部位曝險加房地產，</tspan>
+                        <tspan x={popupX + 12} dy="18">再除以淨資產。</tspan>
+                      </text>
+                    ) : (
+                      <text x={popupX + 12} y={popupY + 19} fontSize="12" fontWeight="500" fill="#0f172a">
+                        <tspan x={popupX + 12}>房產視同現金：金融部位曝險除以淨資產；</tspan>
+                        <tspan x={popupX + 12} dy="18">房地產不計入曝險，淨資產與房貸不變。</tspan>
+                      </text>
+                    )}
+                  </g>
+                )}
+              </g>
+            );
+          })}
         </svg>
       </div>
     </section>
