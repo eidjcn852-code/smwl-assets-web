@@ -1,6 +1,6 @@
 import { pagesFetch, backupKey } from "./google-sheets";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   ChevronDown,
@@ -835,6 +835,38 @@ function AccountPanel({
   );
 }
 
+function TightLeverageExplanation({ text, centerX, bottomY, chartWidth }: {
+  text: string;
+  centerX: number;
+  bottomY: number;
+  chartWidth: number;
+}) {
+  const textRef = useRef<SVGTextElement>(null);
+  const [bounds, setBounds] = useState({ x: 0, y: -12, width: 520, height: 14 });
+  useLayoutEffect(() => {
+    let active = true;
+    const measure = () => {
+      if (!active || !textRef.current) return;
+      const { x, y, width, height } = textRef.current.getBBox();
+      setBounds({ x, y, width, height });
+    };
+    measure();
+    void document.fonts.ready.then(measure);
+    return () => { active = false; };
+  }, [text]);
+  const padding = 2;
+  const boxWidth = bounds.width + padding * 2;
+  const boxHeight = bounds.height + padding * 2;
+  const x = Math.max(2, Math.min(chartWidth - boxWidth - 2, centerX - boxWidth / 2));
+  const y = Math.max(2, bottomY - boxHeight);
+  return (
+    <g transform={`translate(${x - bounds.x + padding}, ${y - bounds.y + padding})`} pointerEvents="none" role="status" aria-live="polite">
+      <rect x={bounds.x - padding} y={bounds.y - padding} width={boxWidth} height={boxHeight} rx="4" fill="white" stroke="#cbd5e1" strokeWidth="1.2" />
+      <text ref={textRef} x="0" y="0" fontSize="12" fontWeight="500" fill="#0f172a">{text}</text>
+    </g>
+  );
+}
+
 function TrendChart({ data }: { data: HistoryPoint[] }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const [leverageInfo, setLeverageInfo] = useState<{
@@ -1137,20 +1169,21 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
                     {leverageText(point.leverageWithoutProperty)}
                   </text>
                 </g>
-                {(withActive || withoutActive) && (
+                {withActive && (
+                  <TightLeverageExplanation
+                    text={`槓桿${leverageText(point.leverageWithProperty)}/${leverageText(point.leverageWithoutProperty)}房產視為風險資產：（金融部位曝險＋房地產）÷淨資產。`}
+                    centerX={point.x}
+                    bottomY={labelY - 10}
+                    chartWidth={width}
+                  />
+                )}
+                {withoutActive && (
                   <g pointerEvents="none" role="status" aria-live="polite">
                     <rect x={popupX} y={popupY} width={popupWidth} height={popupHeight} rx="9" fill="white" stroke="#cbd5e1" strokeWidth="1.2" />
-                    {withActive ? (
-                      <text x={popupX + 8} y={popupY + 18} fontSize="12" fontWeight="500" fill="#0f172a">
-                        <tspan x={popupX + 8}>房產視為風險資產：</tspan>
-                        <tspan x={popupX + 8} dy="18">（金融部位曝險＋房地產）÷淨資產。</tspan>
-                      </text>
-                    ) : (
                       <text x={popupX + 8} y={popupY + 18} fontSize="12" fontWeight="500" fill="#0f172a">
                         <tspan x={popupX + 8}>房產視同現金：金融部位曝險÷淨資產。</tspan>
                         <tspan x={popupX + 8} dy="18">房產不計曝險；淨資產與房貸不變。</tspan>
                       </text>
-                    )}
                   </g>
                 )}
               </g>
