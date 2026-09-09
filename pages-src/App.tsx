@@ -1111,10 +1111,6 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
             if (!showLeverage) return null;
             const withActive = leverageInfo?.index === index && leverageInfo.kind === "withProperty";
             const withoutActive = leverageInfo?.index === index && leverageInfo.kind === "withoutProperty";
-            const popupWidth = 292;
-            const popupHeight = 46;
-            const popupX = Math.max(2, Math.min(width - popupWidth - 2, point.x - popupWidth / 2));
-            const popupY = Math.max(6, labelY - popupHeight - 10);
             const activate = (kind: "withProperty" | "withoutProperty") =>
               toggleLeverageInfo(index, kind);
             return (
@@ -1177,15 +1173,14 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
                     chartWidth={width}
                   />
                 )}
-                {withoutActive && (
-                  <g pointerEvents="none" role="status" aria-live="polite">
-                    <rect x={popupX} y={popupY} width={popupWidth} height={popupHeight} rx="9" fill="white" stroke="#cbd5e1" strokeWidth="1.2" />
-                      <text x={popupX + 8} y={popupY + 18} fontSize="12" fontWeight="500" fill="#0f172a">
-                        <tspan x={popupX + 8}>房產視同現金：金融部位曝險÷淨資產。</tspan>
-                        <tspan x={popupX + 8} dy="18">房產不計曝險；淨資產與房貸不變。</tspan>
-                      </text>
-                  </g>
-                )}
+{withoutActive && (
+  <TightLeverageExplanation
+    text={`房產視同現金，不計曝險：金融部位曝險÷淨資產。`}
+    centerX={point.x}
+    bottomY={labelY - 10}
+    chartWidth={width}
+  />
+)}
               </g>
             );
           })}
