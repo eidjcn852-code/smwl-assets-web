@@ -1171,7 +1171,7 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
                 </g>
                 {withActive && (
                   <TightLeverageExplanation
-                    text={`槓桿${leverageText(point.leverageWithProperty)}/${leverageText(point.leverageWithoutProperty)}房產視為風險資產：（金融部位曝險＋房地產）÷淨資產。`}
+                    text={`房產視為風險資產：（金融部位曝險＋房地產）÷淨資產。`}
                     centerX={point.x}
                     bottomY={labelY - 10}
                     chartWidth={width}
