@@ -1173,14 +1173,14 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
                     chartWidth={width}
                   />
                 )}
-{withoutActive && (
-  <TightLeverageExplanation
-    text={`房產視同現金，不計曝險：金融部位曝險÷淨資產。`}
-    centerX={point.x}
-    bottomY={labelY - 10}
-    chartWidth={width}
-  />
-)}
+                {withoutActive && (
+                  <TightLeverageExplanation
+                    text={`房產視同現金，不計曝險：金融部位曝險÷淨資產。`}
+                    centerX={point.x}
+                    bottomY={labelY - 10}
+                    chartWidth={width}
+                  />
+                )}
               </g>
             );
           })}
