@@ -1079,8 +1079,8 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
             if (!showLeverage) return null;
             const withActive = leverageInfo?.index === index && leverageInfo.kind === "withProperty";
             const withoutActive = leverageInfo?.index === index && leverageInfo.kind === "withoutProperty";
-            const popupWidth = 390;
-            const popupHeight = leverageInfo?.kind === "withProperty" ? 48 : 54;
+            const popupWidth = 292;
+            const popupHeight = 46;
             const popupX = Math.max(2, Math.min(width - popupWidth - 2, point.x - popupWidth / 2));
             const popupY = Math.max(6, labelY - popupHeight - 10);
             const activate = (kind: "withProperty" | "withoutProperty") =>
@@ -1141,14 +1141,14 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
                   <g pointerEvents="none" role="status" aria-live="polite">
                     <rect x={popupX} y={popupY} width={popupWidth} height={popupHeight} rx="9" fill="white" stroke="#cbd5e1" strokeWidth="1.2" />
                     {withActive ? (
-                      <text x={popupX + 12} y={popupY + 20} fontSize="12" fontWeight="500" fill="#0f172a">
-                        <tspan x={popupX + 12}>房產視為風險資產：金融部位曝險加房地產，</tspan>
-                        <tspan x={popupX + 12} dy="18">再除以淨資產。</tspan>
+                      <text x={popupX + 8} y={popupY + 18} fontSize="12" fontWeight="500" fill="#0f172a">
+                        <tspan x={popupX + 8}>房產視為風險資產：</tspan>
+                        <tspan x={popupX + 8} dy="18">（金融部位曝險＋房地產）÷淨資產。</tspan>
                       </text>
                     ) : (
-                      <text x={popupX + 12} y={popupY + 19} fontSize="12" fontWeight="500" fill="#0f172a">
-                        <tspan x={popupX + 12}>房產視同現金：金融部位曝險除以淨資產；</tspan>
-                        <tspan x={popupX + 12} dy="18">房地產不計入曝險，淨資產與房貸不變。</tspan>
+                      <text x={popupX + 8} y={popupY + 18} fontSize="12" fontWeight="500" fill="#0f172a">
+                        <tspan x={popupX + 8}>房產視同現金：金融部位曝險÷淨資產。</tspan>
+                        <tspan x={popupX + 8} dy="18">房產不計曝險；淨資產與房貸不變。</tspan>
                       </text>
                     )}
                   </g>
