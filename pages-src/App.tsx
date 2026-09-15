@@ -117,7 +117,7 @@ const domainGuides: Record<string, ExplanationGuide> = {
     formula:
       "單一標的占比＝最大標的市值÷全部證券市值；前三大占比＝前三大標的市值合計÷全部證券市值；地域集中度＝較大的台灣或海外證券市值÷全部證券市值。",
     criteria:
-      "單一標的 >30% 留意、>50% 警戒；前三大 >75% 留意、>90% 警戒；地域 >65% 留意、>80% 警戒，採較嚴重結果。",
+      "單一標的 >30% 留意、>50% 警戒；至少三個現有標的時，前三大 >75% 留意、>90% 警戒；地域 >65% 留意、>80% 警戒。缺漏另列，不覆蓋已確認的風險；加碼草稿不影響目前集中度。",
   },
   槓桿與質押: {
     description:
@@ -133,15 +133,15 @@ const domainGuides: Record<string, ExplanationGuide> = {
     formula:
       "負債比＝總負債÷總資產×100%；估算流動比率＝（現金＋目前證券市值）÷（質押借款＋一般負債＋海外負債＋海外質押借款）×100%。房貸因缺少一年內到期金額，暫不列入流動負債。",
     criteria:
-      "負債比 >30% 為留意、>50% 為警戒；估算流動比率 <150% 為留意、<100% 為警戒。若沒有估算流動負債，顯示「無流動負債」。",
+      "負債比 >30% 留意、>50% 警戒；估算流動比率 <150% 留意、<100% 警戒；有負債時，現金÷總負債 <20% 留意、<10% 警戒；淨資產≤0 警戒。沒有估算流動負債時顯示「無流動負債」。",
   },
   壓力承受能力: {
     description:
       "比較五組歷史情境，使用估計損失最大的一組檢查市場與房地產同步下跌後，淨資產還能保留多少。",
     formula:
-      "重壓回撤＝五組歷史情境中的最大估計損失÷目前淨資產×100%；00631L 優先使用各次事件的實際峰谷跌幅，汽車不列入壓力損失。",
+      "重壓回撤＝五組情境中的最大估計損失÷目前淨資產×100%；00631L 的 2000／2008 年採指定假設，2015／2020／2022 年採設定的峰谷跌幅；汽車不列入壓力損失。淨資產非正時，回撤比例不適用。",
     criteria:
-      "回撤 >30% 為留意；回撤 >50% 或壓力後淨資產≤0 為警戒。",
+      "重壓回撤 >30% 留意、>50% 警戒；壓力後淨資產≤0 或估算維持率<180% 警戒。另檢查歷史最大回落 >20% 留意、>30% 警戒，以及連續下降至少兩個月；採較嚴重結果。",
   },
 };
 
@@ -192,10 +192,12 @@ function ExplanationTooltip({
   guide,
   label,
   findings = [],
+  interpretation,
 }: {
   guide: ExplanationGuide;
   label: string;
   findings?: HealthCheckResult["domains"][number]["findings"];
+  interpretation?: string;
 }) {
   return (
     <>
@@ -249,7 +251,7 @@ function ExplanationTooltip({
             </div>
           ) : (
             <p className="mt-1 text-[10px] leading-4 text-emerald-200">
-              目前沒有觸發此指標的主要風險門檻。
+              {interpretation ?? "目前可計算資料未觸發此類別的提醒門檻；不代表沒有風險。"}
             </p>
           )}
         </div>
@@ -1342,6 +1344,8 @@ function HealthCheckPanel({
                         <ExplanationTooltip
                           guide={stressScenarioGuides[test.scenario]}
                           label={test.scenario}
+                          findings={test.findings}
+                          interpretation={test.interpretation}
                         />
                       )}
                     </div>
@@ -1355,7 +1359,7 @@ function HealthCheckPanel({
                       <div>
                         <dt className="text-slate-400">回撤</dt>
                         <dd className="mt-1 font-bold tabular-nums text-white">
-                          {test.drawdownPct.toFixed(1)}%
+                          {test.drawdownPct === null ? "不適用（淨資產非正）" : `${test.drawdownPct.toFixed(1)}%`}
                         </dd>
                       </div>
                       <div>
@@ -1367,7 +1371,7 @@ function HealthCheckPanel({
                       <div>
                         <dt className="text-slate-400">壓力後曝險</dt>
                         <dd className="mt-1 font-bold tabular-nums text-amber-100">
-                          {test.exposureMultipleAfter.toFixed(2)} 倍
+                          {test.exposureMultipleAfter === null ? "無法計算（淨資產非正）" : `${test.exposureMultipleAfter.toFixed(2)} 倍`}
                         </dd>
                       </div>
                       <div>
@@ -1393,6 +1397,14 @@ function HealthCheckPanel({
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/[0.05] p-5">
+              {result.dataNotes.length > 0 && (
+                <section aria-label="資料檢查與計算限制" className="mb-5 rounded-xl border border-amber-300/20 bg-amber-300/5 p-3">
+                  <h3 className="text-sm font-bold text-amber-100">資料檢查與計算限制</h3>
+                  <ul className="mt-2 list-disc space-y-2 pl-4 text-sm leading-6 text-slate-300">
+                    {result.dataNotes.map(note => <li key={note}>{note}</li>)}
+                  </ul>
+                </section>
+              )}
               <h3 className="flex items-center gap-2 font-black">
                 <ShieldCheck size={19} className="text-emerald-300" />
                 建議行動

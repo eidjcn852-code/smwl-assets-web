@@ -9,8 +9,8 @@
     "dev": "vite --config vite.pages.config.ts",
     "build": "vite build --config vite.pages.config.ts",
     "build:pages": "vite build --config vite.pages.config.ts",
-    "test": "node --experimental-strip-types --test tests/monthly-leverage.test.mjs tests/pages-google.test.mjs",
-    "test:pages": "node --experimental-strip-types --test tests/binding.test.mjs tests/monthly-leverage.test.mjs tests/pages-google.test.mjs"
+    "test": "node --experimental-strip-types --test tests/monthly-leverage.test.mjs tests/pages-google.test.mjs tests/health-check.test.mjs",
+    "test:pages": "node --experimental-strip-types --test tests/binding.test.mjs tests/monthly-leverage.test.mjs tests/pages-google.test.mjs tests/health-check.test.mjs"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2",

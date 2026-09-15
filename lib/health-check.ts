@@ -1,5 +1,11 @@
 export type HealthStatus = "良好" | "留意" | "警戒" | "資料不足";
 export type HealthSeverity = "高" | "中" | "低";
+export type HealthFinding = {
+  severity: HealthSeverity;
+  title: string;
+  evidence: string;
+  impact: string;
+};
 export type HealthDomainLabel =
   | "資產結構"
   | "集中度"
@@ -50,12 +56,7 @@ export type HealthCheckResult = {
     value: string;
     status: HealthStatus;
     explanation: string;
-    findings: Array<{
-      severity: HealthSeverity;
-      title: string;
-      evidence: string;
-      impact: string;
-    }>;
+    findings: HealthFinding[];
   }>;
   metrics: Array<{
     label: string;
@@ -74,11 +75,12 @@ export type HealthCheckResult = {
     scenario: string;
     estimatedLoss: number;
     netAssetsAfter: number;
-    drawdownPct: number;
-    exposureMultipleAfter: number;
+    drawdownPct: number | null;
+    exposureMultipleAfter: number | null;
     estimatedMaintenanceRatio: number | null;
     currentRatioAfter: number | null;
     interpretation: string;
+    findings: HealthFinding[];
   }>;
   actions: Array<{
     priority: number;
@@ -117,6 +119,9 @@ const safeNumber = (value: unknown) => {
 const positive = (value: unknown) => Math.max(safeNumber(value), 0);
 const clamp = (value: number, minimum: number, maximum: number) =>
   Math.min(maximum, Math.max(minimum, value));
+// Ignore floating-point noise at exact percentage boundaries (e.g. 179.99999999999997).
+const below = (value: number, threshold: number) => value < threshold - 1e-9;
+const above = (value: number, threshold: number) => value > threshold + 1e-9;
 const percent = (value: number) => `${value.toFixed(1)}%`;
 const multiple = (value: number) =>
   Number.isFinite(value) ? `${value.toFixed(2)} 倍` : "無法計算";
@@ -125,7 +130,9 @@ const money = (value: number) =>
     Math.round(value),
   )}`;
 const normalizedTicker = (value: string) =>
-  value.trim().toUpperCase().replace(/\s+/g, "");
+  value.trim().toUpperCase().replace(/\s+/g, "")
+    .replace(/^(?:TPE|TWSE|TPEX):(?=\d{4,6}[A-Z]*$)/, "")
+    .replace(/^(\d{4,6}[A-Z]*)\.(?:TW|TWO)$/, "$1");
 const statusRank: Record<HealthStatus, number> = {
   良好: 0,
   資料不足: 1,
@@ -136,12 +143,6 @@ const severityRank: Record<HealthSeverity, number> = { 低: 1, 中: 2, 高: 3 };
 
 const maxStatus = (...statuses: HealthStatus[]) =>
   statuses.sort((a, b) => statusRank[b] - statusRank[a])[0] ?? "良好";
-
-const statusFromThreshold = (
-  value: number,
-  caution: number,
-  alert: number,
-): HealthStatus => (value > alert ? "警戒" : value > caution ? "留意" : "良好");
 
 const positionSnapshot = (position: HealthPosition): PositionSnapshot => {
   const normalizedName = normalizedTicker(position.name);
@@ -222,7 +223,7 @@ const scenarioResult = (
   const estimatedLoss = marketLoss + nonMarketLoss;
   const netAssetsAfter = netAssets - estimatedLoss;
   const drawdownPct =
-    netAssets > 0 ? (estimatedLoss / netAssets) * 100 : estimatedLoss > 0 ? 100 : 0;
+    netAssets > 0 ? (estimatedLoss / netAssets) * 100 : null;
   const stressedSecurities = positions.reduce((sum, position) => {
     return (
       sum +
@@ -248,27 +249,38 @@ const scenarioResult = (
       ? ((cash + stressedSecurities) / estimatedCurrentLiabilities) * 100
       : null;
 
-  let interpretation = "壓力後仍維持正淨資產，但需搭配集中度與流動性一起判讀。";
+  // One source for the card interpretation, tooltip and domain risk status.
+  const findings: HealthFinding[] = [];
   if (netAssetsAfter <= 0) {
-    interpretation = "此情境下淨資產可能轉為零或負值，屬最高優先風險。";
-  } else if (
-    estimatedMaintenanceRatio !== null &&
-    estimatedMaintenanceRatio < 180
-  ) {
-    interpretation =
-      "估算質押安全空間明顯縮小；實際門檻仍須以券商契約與質押品折算率為準。";
-  } else if (drawdownPct > 30) {
-    interpretation = "淨資產回落幅度超過 30%，可能顯著壓縮後續調整空間。";
+    findings.push({ severity: "高", title: "壓力後淨資產為零或負值",
+      evidence: `壓力後淨資產 ${money(netAssetsAfter)}，已達 ≤0 門檻。`,
+      impact: "此情境下淨資產可能轉為零或負值，屬最高優先風險。" });
   }
+  if (
+    estimatedMaintenanceRatio !== null &&
+    below(estimatedMaintenanceRatio, 180)
+  ) {
+    findings.push({ severity: "高", title: "壓力後估算維持率低於 180%",
+      evidence: `估算維持率 ${percent(estimatedMaintenanceRatio)}，以全部證券市值估算。`,
+      impact: "估算質押安全空間明顯縮小；實際門檻仍須以券商契約與質押品折算率為準。" });
+  }
+  if (drawdownPct !== null && above(drawdownPct, 30)) {
+    findings.push({ severity: above(drawdownPct, 50) ? "高" : "中",
+      title: `壓力回撤超過 ${above(drawdownPct, 50) ? 50 : 30}%`,
+      evidence: `估計損失 ${money(estimatedLoss)}，占目前淨資產 ${percent(drawdownPct)}。`,
+      impact: `淨資產回落幅度超過 ${above(drawdownPct, 50) ? 50 : 30}%，可能顯著壓縮後續調整空間。` });
+  }
+  const interpretation = findings[0]?.impact ??
+    "此情境未達淨資產≤0、估算維持率<180%或回撤>30%的提醒門檻；仍需搭配集中度與流動性判讀。";
 
   return {
     scenario: definition.scenario,
     estimatedLoss: Math.round(estimatedLoss),
     netAssetsAfter: Math.round(netAssetsAfter),
-    drawdownPct: Number(drawdownPct.toFixed(1)),
+    drawdownPct: drawdownPct === null ? null : Number(drawdownPct.toFixed(1)),
     exposureMultipleAfter: Number.isFinite(exposureMultipleAfter)
       ? Number(exposureMultipleAfter.toFixed(2))
-      : 99,
+      : null,
     estimatedMaintenanceRatio:
       estimatedMaintenanceRatio === null
         ? null
@@ -276,6 +288,7 @@ const scenarioResult = (
     currentRatioAfter:
       currentRatioAfter === null ? null : Number(currentRatioAfter.toFixed(1)),
     interpretation,
+    findings,
   };
 };
 
@@ -384,7 +397,7 @@ export const buildDeterministicHealthCheck = (
     item.leveraged ||= position.isLeveragedProduct;
     aggregate.set(key, item);
   }
-  const aggregatedPositions = [...aggregate.values()].sort(
+  const aggregatedPositions = [...aggregate.values()].filter(item => item.value > 0).sort(
     (a, b) => b.value - a.value,
   );
   const largestPosition = aggregatedPositions[0];
@@ -453,11 +466,12 @@ export const buildDeterministicHealthCheck = (
       : 0;
 
   const history = [...input.history]
+    .filter(point => typeof point.netAssets === "number" && Number.isFinite(point.netAssets))
     .map((point) => ({
       month: String(point.month || "").trim(),
       netAssets: safeNumber(point.netAssets),
     }))
-    .filter((point) => point.month && point.netAssets > 0)
+    .filter((point) => point.month)
     .sort((a, b) => a.month.localeCompare(b.month));
   let historicalPeak = 0;
   let maximumDrawdown = 0;
@@ -473,11 +487,11 @@ export const buildDeterministicHealthCheck = (
   const latestHistory = history.at(-1);
   const firstHistory = history[0];
   const historicalChange =
-    firstHistory && latestHistory
+    firstHistory && latestHistory && firstHistory.netAssets > 0
       ? ((latestHistory.netAssets - firstHistory.netAssets) /
           firstHistory.netAssets) *
         100
-      : 0;
+      : null;
   let consecutiveDeclines = 0;
   for (let index = history.length - 1; index > 0; index -= 1) {
     if (history[index].netAssets < history[index - 1].netAssets) {
@@ -488,26 +502,30 @@ export const buildDeterministicHealthCheck = (
   }
 
   const dataNotes: string[] = [];
+  // Draft orders must not invalidate the concentration of existing holdings.
   const incompletePositions = positions.filter(
     (position) =>
       (!position.normalizedName &&
-        (position.price > 0 ||
-          position.shares > 0 ||
-          position.plannedPrice > 0 ||
-          position.plannedShares > 0)) ||
+        (position.price > 0 || position.shares > 0)) ||
       ((position.price > 0 || position.shares > 0) &&
-        !(position.price > 0 && position.shares > 0)) ||
-      ((position.plannedPrice > 0 || position.plannedShares > 0) &&
-        !(position.plannedPrice > 0 && position.plannedShares > 0)),
+        !(position.price > 0 && position.shares > 0)),
   );
+  const describePosition = (position: PositionSnapshot) =>
+    `${position.account}／${position.market === "tw" ? "國內" : "國外"}／${position.name.trim() || "未命名部位"}`;
+  const incompletePlans = positions.filter(position =>
+    (position.plannedPrice > 0 || position.plannedShares > 0) &&
+    (!position.normalizedName || !(position.plannedPrice > 0 && position.plannedShares > 0)));
   if (incompletePositions.length) {
     dataNotes.push(
-      `有 ${incompletePositions.length} 筆部位缺少名稱、價格或股數，未完整納入計算。`,
+      `目前持倉資料不完整：${incompletePositions.map(describePosition).join("、")}；請核對名稱、價格與股數。比例僅依可計算資料估算，不會隱藏已確認的風險。`,
     );
+  }
+  for (const position of incompletePlans) {
+    dataNotes.push(`加碼草稿未完成：${describePosition(position)}，${!position.normalizedName ? "缺少名稱；" : ""}加碼價位 ${position.plannedPrice}、加碼股數 ${position.plannedShares}；未納入加碼模擬，不影響目前持倉集中度判讀。`);
   }
   if (plannedSecurities > 0) {
     dataNotes.push(
-      `預計加碼 ${money(plannedSecurities)} 已從目前總資產排除，只呈現在加碼後模擬。`,
+      `預計加碼 ${money(plannedSecurities)} 已從目前總資產排除。加碼模擬假設以現有現金支應、淨資產不變；未建模新增借款或外部入金。${plannedSecurities > cash ? "預計金額超過現有現金，此模擬不可視為可執行方案。" : ""}`,
     );
   }
   if (pledgedLoan > 0) {
@@ -647,10 +665,10 @@ export const buildDeterministicHealthCheck = (
     );
   }
 
-  if (topThreeRatio > 85 && aggregatedPositions.length >= 3) {
+  if (topThreeRatio > 75 && aggregatedPositions.length >= 3) {
     addRisk(
       "集中度",
-      "中",
+      topThreeRatio > 90 ? "高" : "中",
       "前三大部位高度集中",
       `前三大標的合計占金融部位 ${percent(topThreeRatio)}。`,
       "少數標的同步下跌時，其他部位難以提供足夠緩衝。",
@@ -704,7 +722,7 @@ export const buildDeterministicHealthCheck = (
   }
 
   if (pledgedLoan > 0 && estimatedMaintenance !== null) {
-    if (estimatedMaintenance < 180) {
+    if (below(estimatedMaintenance, 180)) {
       addRisk(
         "槓桿與質押",
         "高",
@@ -713,7 +731,7 @@ export const buildDeterministicHealthCheck = (
         "市場下跌時可能出現補繳或被動處分風險。",
         "立即依券商實際質押品、折算率與追繳門檻重新核對。",
       );
-    } else if (estimatedMaintenance < 250) {
+    } else if (below(estimatedMaintenance, 250)) {
       addRisk(
         "槓桿與質押",
         "中",
@@ -748,12 +766,23 @@ export const buildDeterministicHealthCheck = (
   if (cashCoverage < 20 && liabilities > 0) {
     addRisk(
       "流動性與負債",
-      "中",
+      cashCoverage < 10 ? "高" : "中",
       "現金相對負債緩衝有限",
       `現金約可覆蓋總負債 ${percent(cashCoverage)}。`,
       "這不代表現金流不足，但遇到追繳或大額到期時調度空間較小。",
       "補充每月支出、收入與負債到期資料前，先將此項視為結構性提醒。",
     );
+  }
+
+  if (illiquidRatio > 50) {
+    addRisk("資產結構", illiquidRatio > 70 ? "高" : "中", "低流動性資產占比偏高",
+      `房地產與汽車合計占總資產 ${percent(illiquidRatio)}。`,
+      "帳面資產不一定能即時變現，須保留緊急資金。", "分開管理房產、汽車與可動用資金。");
+  }
+  if (currentRatio !== null && currentRatio < 150) {
+    addRisk("流動性與負債", currentRatio < 100 ? "高" : "中", "估算流動比率偏低",
+      `估算流動比率 ${percent(currentRatio)}；低於150%留意、低於100%警戒。`,
+      "此估算不含房貸一年內到期額，證券下跌也會削弱覆蓋能力。", "核對一年內到期負債與可變現資產。");
   }
 
   if (maximumDrawdown > 20) {
@@ -798,73 +827,24 @@ export const buildDeterministicHealthCheck = (
       "集中度",
       "中",
       "部位資料不完整",
-      `${incompletePositions.length} 筆部位無法完整計算。`,
+      `${incompletePositions.map(describePosition).join("、")}：目前持倉缺少名稱、價格或股數。`,
       "集中度、總資產與壓力損失可能被低估。",
       "先補齊名稱、價格及股數，再以報價時間核對。",
     );
   }
 
-  if (severeStress.netAssetsAfter <= 0) {
-    addRisk(
-      "壓力承受能力",
-      "高",
-      "嚴重壓力下淨資產可能轉負",
-      `${severeStress.scenario}後估算淨資產 ${money(severeStress.netAssetsAfter)}。`,
-      "市場與非金融資產同時回落時，負債會放大資產負值風險。",
-      "優先降低會造成被動賣出的槓桿與短期負債。",
-    );
-  } else if (severeStress.drawdownPct > 35) {
-    addRisk(
-      "壓力承受能力",
-      "中",
-      "嚴重壓力下淨資產回落明顯",
-      `估計損失 ${money(severeStress.estimatedLoss)}，約為淨資產 ${percent(severeStress.drawdownPct)}。`,
-      "大幅回落會降低後續加碼、還款與資產調整彈性。",
-      "以壓力後淨資產作為曝險上限依據，而不是只看目前市值。",
-    );
+  for (const finding of severeStress.findings) {
+    addRisk("壓力承受能力", finding.severity, finding.title,
+      `${severeStress.scenario}：${finding.evidence}`, finding.impact,
+      "核對壓力後淨資產與質押安全空間，再評估資金調度。");
   }
 
-  const leverageStatus =
-    exposureMultiple > 2 ||
-    leveragedRatio > 25 ||
-    (estimatedMaintenance !== null && estimatedMaintenance < 180)
-      ? "警戒"
-      : exposureMultiple > 1.5 ||
-          leveragedRatio > 10 ||
-          (estimatedMaintenance !== null && estimatedMaintenance < 250)
-        ? "留意"
-        : "良好";
-  const concentrationStatus = maxStatus(
-    statusFromThreshold(geographicConcentration, 65, 80),
-    statusFromThreshold(largestPositionRatio, 30, 50),
-    statusFromThreshold(topThreeRatio, 75, 90),
-  );
-  const structureStatus = maxStatus(
-    statusFromThreshold(realEstateRatio, 40, 60),
-    statusFromThreshold(illiquidRatio, 50, 70),
-  );
-  const currentRatioStatus: HealthStatus =
-    currentRatio === null
-      ? "良好"
-      : currentRatio < 100
-        ? "警戒"
-        : currentRatio < 150
-          ? "留意"
-          : "良好";
-  const liquidityStatus = maxStatus(
-    debtRatio > 50 || (cashCoverage < 10 && liabilities > 0)
-      ? "警戒"
-      : debtRatio > 30 || (cashCoverage < 20 && liabilities > 0)
-        ? "留意"
-        : "良好",
-    currentRatioStatus,
-  );
-  const stressStatus =
-    severeStress.netAssetsAfter <= 0 || severeStress.drawdownPct > 50
-      ? "警戒"
-      : severeStress.drawdownPct > 30
-        ? "留意"
-        : "良好";
+  // Badge and tooltip derive from the same complete risk list (not the top 8).
+  const statusFor = (domain: HealthDomainLabel): HealthStatus => {
+    const findings = risks.filter(risk => risk.domain === domain);
+    return findings.some(finding => finding.severity === "高") ? "警戒"
+      : findings.some(finding => finding.severity === "中") ? "留意" : "良好";
+  };
 
   const rankedRisks = [...risks].sort(
     (a, b) => severityRank[b.severity] - severityRank[a.severity],
@@ -884,7 +864,7 @@ export const buildDeterministicHealthCheck = (
     {
       label: "資產結構",
       value: `低流動性資產占比 ${percent(illiquidRatio)}`,
-      status: structureStatus,
+      status: statusFor("資產結構"),
       explanation: "房地產與汽車獨立計算，不混入台灣金融資產。",
       findings: findingsFor("資產結構"),
     },
@@ -893,17 +873,15 @@ export const buildDeterministicHealthCheck = (
       value: largestPosition
         ? `${largestPosition.label} ${percent(largestPositionRatio)}`
         : "無金融部位",
-      status:
-        incompletePositions.length || geographicBase <= 0
-          ? "資料不足"
-          : concentrationStatus,
-      explanation: "相同代號已跨 SM／WL 合併，並同時檢查地域與前三大部位。",
+      status: maxStatus(statusFor("集中度"),
+        incompletePositions.length || geographicBase <= 0 ? "資料不足" : "良好"),
+      explanation: `相同代號已跨 SM／WL 合併，並同時檢查地域與前三大部位。${incompletePositions.length ? "目前持倉有缺漏，比例為暫估；詳見本次判讀。" : ""}${incompletePlans.length ? "加碼草稿未完成，不影響目前集中度；詳見資料檢查。" : ""}`,
       findings: findingsFor("集中度"),
     },
     {
       label: "槓桿與質押",
       value: multiple(exposureMultiple),
-      status: leverageStatus,
+      status: statusFor("槓桿與質押"),
       explanation: "包含商品槓桿與估算質押安全空間；不等同券商正式維持率。",
       findings: findingsFor("槓桿與質押"),
     },
@@ -912,15 +890,15 @@ export const buildDeterministicHealthCheck = (
       value: `負債比 ${percent(debtRatio)}\n流動比率 ${
         currentRatio === null ? "無流動負債" : percent(currentRatio)
       }`,
-      status: liquidityStatus,
+      status: statusFor("流動性與負債"),
       explanation:
         "流動比率以現金與可交易證券對估算流動負債計算；不含房貸、房地產與汽車。",
       findings: findingsFor("流動性與負債"),
     },
     {
       label: "壓力承受能力",
-      value: `重壓回落 ${percent(severeStress.drawdownPct)}`,
-      status: stressStatus,
+      value: severeStress.drawdownPct === null ? "淨資產非正，回撤比例不適用" : `重壓回落 ${percent(severeStress.drawdownPct)}`,
+      status: statusFor("壓力承受能力"),
       explanation: "以固定公開情境計算，不使用主觀風險選項。",
       findings: findingsFor("壓力承受能力"),
     },
@@ -985,7 +963,7 @@ export const buildDeterministicHealthCheck = (
     {
       label: "歷史淨資產變動",
       value:
-        history.length >= 2
+        history.length >= 2 && historicalChange !== null
           ? `${historicalChange >= 0 ? "+" : ""}${percent(historicalChange)}`
           : "資料不足",
       explanation: `最大歷史回落約 ${percent(maximumDrawdown)}，不等同投資報酬。`,
