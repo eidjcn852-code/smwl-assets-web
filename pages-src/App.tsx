@@ -1,4 +1,5 @@
 import { pagesFetch, backupKey } from "./google-sheets";
+import { ViewportExplanation } from "./ViewportExplanation";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
@@ -200,18 +201,7 @@ function ExplanationTooltip({
   interpretation?: string;
 }) {
   return (
-    <>
-      <button
-        type="button"
-        aria-label={`查看${label}的詳細解釋與公式`}
-        className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-white/10 text-slate-400 transition hover:border-indigo-300/40 hover:text-indigo-200 focus:border-indigo-300/50 focus:text-indigo-100 focus:outline-none"
-      >
-        <Info size={14} />
-      </button>
-      <div
-        role="tooltip"
-        className="pointer-events-auto invisible absolute inset-x-0 top-[calc(100%+0.5rem)] z-50 max-h-[70vh] overflow-y-auto rounded-xl border border-indigo-300/25 bg-slate-950/95 p-4 text-left opacity-0 shadow-2xl backdrop-blur transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100"
-      >
+    <ViewportExplanation label={label}>
         <div className="text-xs font-black text-indigo-200">{label}</div>
         <p className="mt-2 text-[11px] leading-5 text-slate-300">
           {guide.description}
@@ -267,8 +257,7 @@ function ExplanationTooltip({
           <strong className="text-slate-300">判讀方式：</strong>
           {guide.criteria}
         </p>
-      </div>
-    </>
+    </ViewportExplanation>
   );
 }
 
