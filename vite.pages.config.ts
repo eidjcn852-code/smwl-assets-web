@@ -8,5 +8,10 @@ export default defineConfig({
   publicDir: false,
   plugins: [react()],
   css: { postcss: { plugins: [tailwind()] } },
-  build: { outDir: "../dist-pages", emptyOutDir: true, sourcemap: false },
+  build: { outDir: "../dist-pages", emptyOutDir: true, sourcemap: false,
+    rollupOptions: { input: {
+      main: fileURLToPath(new URL('./pages-src/index.html', import.meta.url)),
+      simulator: fileURLToPath(new URL('./pages-src/simulator/index.html', import.meta.url)),
+    } },
+  },
 });
