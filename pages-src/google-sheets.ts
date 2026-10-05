@@ -140,7 +140,7 @@ export async function pagesFetch(input: string, options: RequestInit = {}): Prom
   try {
     const url = new URL(input, 'https://local.invalid');
     if (url.pathname === '/api/health-check') {
-      return Response.json({ mode: 'deterministic', analysis: buildDeterministicHealthCheck(JSON.parse(String(options.body))) });
+      return Response.json({ mode: 'deterministic', analysis: buildDeterministicHealthCheck(JSON.parse(String(options.body)), { excludedExposureTickers: ['00865B'] }) });
     }
     if (url.pathname !== '/api/cloud') throw new Error('不支援的資料路徑。');
     const signal = options.signal || undefined;

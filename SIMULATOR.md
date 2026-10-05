@@ -1,10 +1,11 @@
 # Independent asset simulator
 
-Entry: `/smwl-assets-web/simulator/`. The original `/smwl-assets-web/` entry is unchanged.
+Entry: `/smwl-assets-web/simulator/`. It remains independent from the original `/smwl-assets-web/` entry.
 
 - Manual prices and editable accounts; charts, leverage, planned additions and deterministic health checks are retained.
-- 00865B counts towards assets, net worth, concentration, collateral value and stress losses, but is omitted from current, planned and stress exposure numerators. Both account totals and health checks apply the simulator rule.
-- Liabilities have one region-neutral section per account. Existing domestic and foreign pledge/general debt values merge on import and draft load without changing the total owed.
+- 00865B counts towards assets, net worth, concentration, collateral value and stress losses, but is omitted from current, planned and stress exposure numerators. Both the simulator and production account totals and health checks now apply this rule.
+- Liabilities have one region-neutral section per account in both entries. Existing domestic and foreign pledge/general debt values merge on import or load without changing the total owed; the production spreadsheet retains its legacy field names for compatibility.
+- Existing monthly leverage snapshots are left as recorded; future production snapshots use the updated 00865B exposure rule.
 - Regional allocation includes current domestic securities, property and car values on the TW side, and current overseas securities on the foreign side. Cash, debt and planned additions are unallocated. The production dashboard uses the same allocation rule.
 - No Google SDK, authentication, Sheets request or market-price request in the simulator entry.
 - Draft, saved snapshot and baseline use separate `smwl-simulator-v1-*` localStorage keys. Browser storage is not encrypted and does not sync between devices.

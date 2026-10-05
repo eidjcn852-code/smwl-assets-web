@@ -44,6 +44,17 @@ test('account parsing rejects empty and swapped rows', () => {
   assert.throws(() => api.parseAccounts([['WL', '{}'], ['SM', '{}']]));
   assert.throws(() => api.parseAccounts([['SM', '{}'], ['WL', '{}']]));
 });
+test('production health check excludes 00865B from current and stressed exposure, not assets', async () => {
+  const payload = {
+    accounts: [{ name: 'SM', cash: 1000, realEstate: 0, car: 0, marginLoan: 0, debt: 0, mortgage: 0, foreignDebt: 0, foreignMarginLoan: 0 }],
+    positions: [{ account: 'SM', market: 'foreign', name: '00865B', price: 10, shares: 10, plannedPrice: 10, plannedShares: 10, leverage: 1 }],
+    history: [],
+  };
+  const result = await (await api.pagesFetch('/api/health-check', { method: 'POST', body: JSON.stringify(payload) })).json();
+  assert.equal(result.analysis.domains.find(domain => domain.label === '槓桿與質押').value, '0.00 倍');
+  assert.equal(result.analysis.metrics.find(metric => metric.label === '目前總資產').value, '$1,100');
+  assert.ok(result.analysis.stressTests.every(scenario => scenario.exposureMultipleAfter === 0));
+});
 test('read retries transient failures; conflicting save does not write; token stays in memory', async () => {
   const storage = new Map();
   globalThis.localStorage = { getItem: k => storage.get(k), setItem: (k, v) => storage.set(k, v) };
