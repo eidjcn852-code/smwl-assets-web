@@ -124,3 +124,21 @@ test('analysis never mutates caller accounts, holdings or history', () => {
   const source=input(); const before=structuredClone(source);
   check(source); assert.deepEqual(source,before);
 });
+
+test('simulator excludes 00865B from all exposure numerators but keeps asset value and stress losses', () => {
+  for (const name of ['00865B','TWSE:00865B','00865B.TW']) {
+    const holdings=[position({name,price:10,shares:10,plannedPrice:10,plannedShares:5,leverage:1}),
+      position({name:'OTHER',price:10,shares:10,leverage:1})];
+    const source=input({positions:holdings});
+    const standard=check(source);
+    const simulated=check(source,{excludedExposureTickers:['00865B']});
+    assert.equal(standard.metrics.find(m=>m.label==='目前總資產').value,simulated.metrics.find(m=>m.label==='目前總資產').value);
+    assert.equal(domain(standard,'集中度').value,domain(simulated,'集中度').value);
+    assert.equal(domain(standard,'槓桿與質押').value,'0.17 倍');
+    assert.equal(domain(simulated,'槓桿與質押').value,'0.08 倍');
+    assert.equal(standard.stressTests[0].estimatedLoss,simulated.stressTests[0].estimatedLoss);
+    assert.ok(standard.stressTests[0].exposureMultipleAfter>simulated.stressTests[0].exposureMultipleAfter);
+    assert.match(simulated.metrics.find(m=>m.label==='預計加碼').explanation,/0.08 倍/);
+    assert.ok(simulated.dataNotes.some(note=>note.includes('00865B')));
+  }
+});

@@ -19,6 +19,14 @@ test('simulation imports validate amounts/months and discard unrelated settings'
   assert.throws(()=>api.validateSnapshot({...raw,history:[...raw.history,...raw.history]}));
   assert.throws(()=>api.validateSnapshot({...raw,sm:{...raw.sm,cash:'NaN'}}));
 });
+test('older regional debt fields merge without changing total liabilities',()=>{
+  const raw=snapshot();
+  raw.sm={...raw.sm,marginLoan:'120',foreignMarginLoan:'30',debt:'40',foreignDebt:'60',mortgage:'500'};
+  const clean=api.validateSnapshot(raw);
+  assert.deepEqual([clean.sm.marginLoan,clean.sm.debt,clean.sm.mortgage,clean.sm.foreignMarginLoan,clean.sm.foreignDebt],
+    ['150','100','500','0','0']);
+  assert.equal(Number(clean.sm.marginLoan)+Number(clean.sm.debt)+Number(clean.sm.mortgage),750);
+});
 test('explicit production copy is read-only and strips connection details',()=>{
   const values=new Map([['smwl-pages-google-settings',JSON.stringify({spreadsheetId:'synthetic',baseline:1000,clientId:'not-real'})],['smwl-pages-assets-backup:synthetic',JSON.stringify(snapshot())]]);
   const before=JSON.stringify([...values]);
@@ -51,4 +59,12 @@ test('simulator entry has no authentication or quote wiring',async()=>{
   assert.match(app,/TrendChart/);
   assert.match(app,/monthlyLeverage/);
   assert.match(app,/simulation-store/);
+});
+
+test('simulator health route applies its own 00865B exposure rule',async()=>{
+  const payload={accounts:[{name:'SM',cash:1000,realEstate:0,car:0,marginLoan:0,debt:0,mortgage:0,foreignDebt:0,foreignMarginLoan:0}],
+    positions:[{account:'SM',market:'tw',name:'00865B',price:10,shares:10,plannedPrice:0,plannedShares:0,leverage:1}],history:[]};
+  const result=await (await api.pagesFetch('/api/health-check',{method:'POST',body:JSON.stringify(payload)})).json();
+  assert.equal(result.analysis.domains.find(d=>d.label==='槓桿與質押').value,'0.00 倍');
+  assert.equal(result.analysis.metrics.find(m=>m.label==='目前總資產').value,'$1,100');
 });

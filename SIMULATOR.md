@@ -3,6 +3,8 @@
 Entry: `/smwl-assets-web/simulator/`. The original `/smwl-assets-web/` entry is unchanged.
 
 - Manual prices and editable accounts; charts, leverage, planned additions and deterministic health checks are retained.
+- 00865B counts towards assets, net worth, concentration, collateral value and stress losses, but is omitted from current, planned and stress exposure numerators. Both account totals and health checks apply the simulator rule.
+- Liabilities have one region-neutral section per account. Existing domestic and foreign pledge/general debt values merge on import and draft load without changing the total owed.
 - No Google SDK, authentication, Sheets request or market-price request in the simulator entry.
 - Draft, saved snapshot and baseline use separate `smwl-simulator-v1-*` localStorage keys. Browser storage is not encrypted and does not sync between devices.
 - An explicit **複製本機正式版資料** action reads the existing browser backup only. It strips connection settings and does not write to the original backup or spreadsheet.

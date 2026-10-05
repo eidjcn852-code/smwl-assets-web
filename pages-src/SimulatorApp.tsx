@@ -124,7 +124,7 @@ const domainGuides: Record<string, ExplanationGuide> = {
     description:
       "把商品本身的槓桿、槓桿商品占比及質押借款安全空間合併判讀，不等同券商正式維持率。",
     formula:
-      "總曝險倍數＝［Σ（證券市值×有效槓桿倍數）＋房地產］÷淨資產；估算維持率＝全部證券市值÷質押借款×100%。",
+      "總曝險倍數＝［Σ（00865B 以外證券市值×有效槓桿倍數）＋房地產］÷淨資產；00865B 仍計入資產和質押維持率。估算維持率＝全部證券市值÷質押借款×100%。",
     criteria:
       "曝險 >1.5 倍留意、>2 倍警戒；槓桿商品占證券 >10% 留意、>25% 警戒；估算維持率 <250% 留意、<180% 警戒。",
   },
@@ -266,6 +266,17 @@ const numberOf = (value: unknown) => {
   return Number.isFinite(parsed) ? parsed : 0;
 };
 
+const isExcludedExposure = (name: string) =>
+  /^(?:(?:TPE|TWSE|TPEX):)?00865B(?:\.(?:TW|TWO))?$/i.test(name.trim());
+
+const mergeLiabilities = (account: Account): Account => ({
+  ...account,
+  marginLoan: String(numberOf(account.marginLoan) + numberOf(account.foreignMarginLoan)),
+  foreignMarginLoan: "0",
+  debt: String(numberOf(account.debt) + numberOf(account.foreignDebt)),
+  foreignDebt: "0",
+});
+
 const formatTicker = (value: string, isTw: boolean) => {
   let ticker = value.replace(/^'+/, "").trim().toUpperCase();
   if (ticker === "APPL") ticker = "AAPL";
@@ -294,8 +305,10 @@ const metricsFor = (account: Account): Metrics => {
       const ratio = numberOf(row.leverage) || 1;
       holding += holdingValue;
       added += addValue;
-      exposure += holdingValue * ratio;
-      addedExposure += addValue * ratio;
+      if (!isExcludedExposure(row.name)) {
+        exposure += holdingValue * ratio;
+        addedExposure += addValue * ratio;
+      }
       position[`${prefix}-${row.id}`] = {
         holding: holdingValue,
         add: addValue,
@@ -330,20 +343,20 @@ const metricsFor = (account: Account): Metrics => {
   for (const row of account.tw) {
     const item = position[`tw-${row.id}`];
     const ratio = numberOf(row.leverage) || 1;
-    item.holdingPct = exposure
+    item.holdingPct = exposure && !isExcludedExposure(row.name)
       ? ((item.holding * ratio * 100) / exposure).toFixed(1)
       : "0.0";
-    item.addPct = exposureAfter
+    item.addPct = exposureAfter && !isExcludedExposure(row.name)
       ? ((item.add * ratio * 100) / exposureAfter).toFixed(1)
       : "0.0";
   }
   for (const row of account.foreign) {
     const item = position[`foreign-${row.id}`];
     const ratio = numberOf(row.leverage) || 1;
-    item.holdingPct = exposure
+    item.holdingPct = exposure && !isExcludedExposure(row.name)
       ? ((item.holding * ratio * 100) / exposure).toFixed(1)
       : "0.0";
-    item.addPct = exposureAfter
+    item.addPct = exposureAfter && !isExcludedExposure(row.name)
       ? ((item.add * ratio * 100) / exposureAfter).toFixed(1)
       : "0.0";
   }
@@ -638,7 +651,8 @@ function FragmentRow({
             <span className="ml-1 text-[10px] font-bold text-purple-500">x</span>
           </div>
         </td>
-        <td className="p-1.5 text-right text-xs font-black text-purple-600">
+        <td className="p-1.5 text-right text-xs font-black text-purple-600"
+          title={isExcludedExposure(row.name) ? "00865B 仍計入資產與淨資產，但不計入曝險分子。" : undefined}>
           {item?.holdingPct ?? "0.0"}%
         </td>
         <td className="p-1.5">
@@ -743,26 +757,12 @@ function AccountPanel({
           onRemove={(id) => patch({ [kind]: rows.filter((row) => row.id !== id) })}
           onQuote={(id) => onQuote(name, kind, id)}
         />
-        <div
-          className={`mt-3 grid grid-cols-2 gap-3 rounded-lg border bg-white p-3 ${
-            tone === "indigo" ? "border-indigo-100" : "border-emerald-100"
-          }`}
-        >
-          {kind === "tw" ? (
-            <>
-              <Field label="房地產金額" value={account.realEstate} onChange={(realEstate) => patch({ realEstate })} />
-              <Field label="汽車金額" value={account.car} onChange={(car) => patch({ car })} />
-              <Field label="質押借款" value={account.marginLoan} onChange={(marginLoan) => patch({ marginLoan })} />
-              <Field label="一般負債" value={account.debt} onChange={(debt) => patch({ debt })} />
-              <Field label="房貸負債" value={account.mortgage} onChange={(mortgage) => patch({ mortgage })} />
-            </>
-          ) : (
-            <>
-              <Field label="一般負債" value={account.foreignDebt} onChange={(foreignDebt) => patch({ foreignDebt })} />
-              <Field label="質押借款" value={account.foreignMarginLoan} onChange={(foreignMarginLoan) => patch({ foreignMarginLoan })} />
-            </>
-          )}
-        </div>
+        {kind === "tw" && (
+          <div className="mt-3 grid grid-cols-2 gap-3 rounded-lg border border-indigo-100 bg-white p-3">
+            <Field label="房地產金額" value={account.realEstate} onChange={(realEstate) => patch({ realEstate })} />
+            <Field label="汽車金額" value={account.car} onChange={(car) => patch({ car })} />
+          </div>
+        )}
       </section>
     );
   };
@@ -779,7 +779,7 @@ function AccountPanel({
     ["2. 總資產 (實際市值)", `$ ${money(metrics.totalAssets)}`],
     ["3. 總負債", `$ ${money(metrics.liabilities)}`],
     ["4. 淨資產", <b key="net" className="text-blue-400">$ {money(metrics.netAssets)}</b>],
-    ["5. 曝險總額 (含槓桿倍數)", <b key="exp" className="text-purple-400">$ {money(metrics.exposure)}</b>],
+    ["5. 曝險總額 (00865B 不計入)", <b key="exp" className="text-purple-400">$ {money(metrics.exposure)}</b>],
     ["6. 實際槓桿比率", <b key="lev" className="text-orange-400">{metrics.leverage} 倍</b>],
   ];
 
@@ -798,6 +798,14 @@ function AccountPanel({
         </div>
         {section("tw", "國內部位 (含房地產)", "indigo")}
         {section("foreign", "國外部位", "emerald")}
+        <section className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <h3 className="mb-3 text-sm font-bold text-slate-700">負債（不分台灣／國外）</h3>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="質押借款" value={account.marginLoan} onChange={(marginLoan) => patch({ marginLoan })} />
+            <Field label="一般負債" value={account.debt} onChange={(debt) => patch({ debt })} />
+            <Field label="房貸負債" value={account.mortgage} onChange={(mortgage) => patch({ mortgage })} />
+          </div>
+        </section>
       </div>
       <footer className="mt-auto bg-slate-800 p-5 text-sm font-medium text-slate-100">
         <h4 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400">
@@ -1061,7 +1069,7 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
                 />
                 <title>
                   {point.month}：${money(point.netAssets)}；月報酬 {point.momRate.toFixed(1)}%；YTD {point.ytdRate.toFixed(1)}%
-                  {showLeverage ? `；含房 ${leverageText(point.leverageWithProperty)}＝（金融部位曝險＋房地產）÷淨資產；不含房 ${leverageText(point.leverageWithoutProperty)}＝金融部位曝險÷淨資產；房貸與淨資產不變。` : ""}
+                  {showLeverage ? `；含房 ${leverageText(point.leverageWithProperty)}＝（金融部位曝險＋房地產）÷淨資產；不含房 ${leverageText(point.leverageWithoutProperty)}＝金融部位曝險÷淨資產；00865B 不計入曝險分子，房貸與淨資產不變。` : ""}
                 </title>
               </g>
             );
@@ -1156,7 +1164,7 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
                 </g>
                 {withActive && (
                   <TightLeverageExplanation
-                    text={`房產視為風險資產：（金融部位曝險＋房地產）÷淨資產。`}
+                    text={`房產視為風險資產：（金融部位曝險＋房地產）÷淨資產；00865B 不計入曝險。`}
                     centerX={point.x}
                     bottomY={labelY - 10}
                     chartWidth={width}
@@ -1164,7 +1172,7 @@ function TrendChart({ data }: { data: HistoryPoint[] }) {
                 )}
                 {withoutActive && (
                   <TightLeverageExplanation
-                    text={`房產視同現金，不計曝險：金融部位曝險÷淨資產。`}
+                    text={`房產視同現金，不計曝險：金融部位曝險÷淨資產；00865B 不計入曝險。`}
                     centerX={point.x}
                     bottomY={labelY - 10}
                     chartWidth={width}
@@ -1481,8 +1489,8 @@ export default function SimulatorApp({ baseline }: { baseline: number }) {
     }
 
     return {
-      sm: fromLegacy(result.sm, sm),
-      wl: fromLegacy(result.wl, wl),
+      sm: mergeLiabilities(fromLegacy(result.sm, sm)),
+      wl: mergeLiabilities(fromLegacy(result.wl, wl)),
       history: nextHistory,
     };
   };
@@ -1747,5 +1755,3 @@ export default function SimulatorApp({ baseline }: { baseline: number }) {
     </main>
   );
 }
-
-

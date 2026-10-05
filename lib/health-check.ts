@@ -198,6 +198,7 @@ const scenarioResult = (
   accounts: HealthAccount[],
   netAssets: number,
   pledgedLoan: number,
+  excludedExposureTickers: ReadonlySet<string>,
 ) => {
   const marketLoss = positions.reduce((sum, position) => {
     return sum + position.currentValue * scenarioPositionShock(definition, position);
@@ -234,7 +235,7 @@ const scenarioResult = (
     positions.reduce((sum, position) => {
       return (
         sum +
-        position.currentValue *
+        (excludedExposureTickers.has(position.normalizedName) ? 0 : position.currentValue) *
           (1 - scenarioPositionShock(definition, position)) *
           position.effectiveLeverage
       );
@@ -294,7 +295,11 @@ const scenarioResult = (
 
 export const buildDeterministicHealthCheck = (
   input: HealthCheckInput,
+  options: { excludedExposureTickers?: readonly string[] } = {},
 ): HealthCheckResult => {
+  const excludedExposureTickers = new Set(
+    (options.excludedExposureTickers ?? []).map(normalizedTicker),
+  );
   const accounts = input.accounts.map((account) => ({
     ...account,
     cash: positive(account.cash),
@@ -392,7 +397,9 @@ export const buildDeterministicHealthCheck = (
     };
     item.value += position.currentValue;
     item.plannedValue += position.plannedValue;
-    item.exposure += position.currentValue * position.effectiveLeverage;
+    if (!excludedExposureTickers.has(position.normalizedName)) {
+      item.exposure += position.currentValue * position.effectiveLeverage;
+    }
     item.accounts.add(position.account);
     item.leveraged ||= position.isLeveragedProduct;
     aggregate.set(key, item);
@@ -421,7 +428,7 @@ export const buildDeterministicHealthCheck = (
 
   const marketExposure = currentPositions.reduce(
     (sum, position) =>
-      sum + position.currentValue * position.effectiveLeverage,
+      sum + (excludedExposureTickers.has(position.normalizedName) ? 0 : position.currentValue * position.effectiveLeverage),
     0,
   );
   const riskExposure = marketExposure + realEstate;
@@ -429,7 +436,7 @@ export const buildDeterministicHealthCheck = (
     netAssets > 0 ? riskExposure / netAssets : Number.POSITIVE_INFINITY;
   const plannedExposure = positions.reduce(
     (sum, position) =>
-      sum + position.plannedValue * position.effectiveLeverage,
+      sum + (excludedExposureTickers.has(position.normalizedName) ? 0 : position.plannedValue * position.effectiveLeverage),
     0,
   );
   const exposureAfterPlanned =
@@ -502,6 +509,9 @@ export const buildDeterministicHealthCheck = (
   }
 
   const dataNotes: string[] = [];
+  if (excludedExposureTickers.size) {
+    dataNotes.push(`${[...excludedExposureTickers].join("、")} 仍計入證券市值、淨資產與壓力損失，但不計入目前、加碼後及壓力後的曝險分子。`);
+  }
   // Draft orders must not invalidate the concentration of existing holdings.
   const incompletePositions = positions.filter(
     (position) =>
@@ -577,6 +587,7 @@ export const buildDeterministicHealthCheck = (
       accounts,
       netAssets,
       pledgedLoan,
+      excludedExposureTickers,
     ),
   );
   const severeStress = stressTests.reduce((mostSevere, current) =>

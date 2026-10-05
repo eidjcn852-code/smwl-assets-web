@@ -21,9 +21,12 @@ export function validateSnapshot(value: unknown) {
           price:numeric(r.price),shares:numeric(r.shares),addPrice:numeric(r.addPrice),addShares:numeric(r.addShares),leverage:numeric(r.leverage)};
       });
     };
+    const marginLoan = Number(numeric(v.marginLoan)) + Number(numeric(v.foreignMarginLoan));
+    const debt = Number(numeric(v.debt)) + Number(numeric(v.foreignDebt));
+    if (!Number.isFinite(marginLoan) || !Number.isFinite(debt)) throw new Error('合計負債超出有效數值範圍。');
     return {cash:numeric(v.cash),tw:positions(v.tw),foreign:positions(v.foreign),
-      realEstate:numeric(v.realEstate),car:numeric(v.car),marginLoan:numeric(v.marginLoan),debt:numeric(v.debt),
-      mortgage:numeric(v.mortgage),foreignDebt:numeric(v.foreignDebt),foreignMarginLoan:numeric(v.foreignMarginLoan)};
+      realEstate:numeric(v.realEstate),car:numeric(v.car),marginLoan:String(marginLoan),debt:String(debt),
+      mortgage:numeric(v.mortgage),foreignDebt:'0',foreignMarginLoan:'0'};
   };
   if (!Array.isArray(value.history) || value.history.length > 1200) throw new Error('月份資料格式不正確。');
   const months = new Set<string>();
@@ -48,7 +51,7 @@ export function readProductionCopy(storage: Pick<Storage,'getItem'>) {
 export async function pagesFetch(input: string, options: RequestInit = {}): Promise<Response> {
   try {
     const url = new URL(input, 'https://simulator.invalid');
-    if (url.pathname === '/api/health-check') return Response.json({analysis:buildDeterministicHealthCheck(JSON.parse(String(options.body)))});
+    if (url.pathname === '/api/health-check') return Response.json({analysis:buildDeterministicHealthCheck(JSON.parse(String(options.body)),{excludedExposureTickers:['00865B']})});
     if (url.pathname !== '/api/cloud' || url.search) throw new Error('模擬版不連接雲端或更新報價。');
     if (options.method === 'POST') {
       const data=JSON.parse(String(options.body));
