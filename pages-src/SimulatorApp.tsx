@@ -30,6 +30,7 @@ import {
 
 let BASE_ASSET_2025 = 1;
 import { monthlyLeverage, leverageText, type MonthlyLeverage } from "../lib/monthly-leverage";
+import { regionalAllocation } from "../lib/regional-allocation";
 
 type Position = {
   id: string;
@@ -68,8 +69,8 @@ type Metrics = {
   foreignRatio: string;
   marginCurrent: string;
   marginAfter: string;
-  twHolding: number;
-  foreignHolding: number;
+  twAllocated: number;
+  foreignAllocated: number;
   position: Record<
     string,
     { holding: number; add: number; holdingPct: string; addPct: string }
@@ -361,9 +362,7 @@ const metricsFor = (account: Account): Metrics => {
       : "0.0";
   }
 
-  const twHolding = tw.holding;
-  const foreignHolding = foreign.holding;
-  const allocated = twHolding + foreignHolding;
+  const allocation = regionalAllocation(tw.holding, foreign.holding, realEstate, car);
   const totalMargin =
     numberOf(account.marginLoan) + numberOf(account.foreignMarginLoan);
   const collateralCurrent = tw.holding + foreign.holding;
@@ -375,18 +374,16 @@ const metricsFor = (account: Account): Metrics => {
     netAssets,
     exposure,
     leverage: netAssets > 0 ? (exposure / netAssets).toFixed(2) : "資產為負值",
-    twRatio: allocated ? ((twHolding * 100) / allocated).toFixed(1) : "0.0",
-    foreignRatio: allocated
-      ? ((foreignHolding * 100) / allocated).toFixed(1)
-      : "0.0",
+    twRatio: allocation.twRatio,
+    foreignRatio: allocation.foreignRatio,
     marginCurrent: totalMargin
       ? ((collateralCurrent * 100) / totalMargin).toFixed(1)
       : "∞",
     marginAfter: totalMargin
       ? ((collateralAfter * 100) / totalMargin).toFixed(1)
       : "∞",
-    twHolding,
-    foreignHolding,
+    twAllocated: allocation.domestic,
+    foreignAllocated: allocation.foreign,
     position,
   };
 };
@@ -769,7 +766,7 @@ function AccountPanel({
 
   const summaryRows: [string, React.ReactNode][] = [
     [
-      "1. 台/外真實資產比例",
+      "1. 台/外資產配置（含房車）",
       <span key="ratio">
         <b className="text-indigo-400">TW {metrics.twRatio}%</b>
         <span className="mx-2 text-slate-500">/</span>
@@ -1452,15 +1449,18 @@ export default function SimulatorApp({ baseline }: { baseline: number }) {
   const smMetrics = useMemo(() => metricsFor(sm), [sm]);
   const wlMetrics = useMemo(() => metricsFor(wl), [wl]);
   const global = useMemo(() => {
-    const tw = smMetrics.twHolding + wlMetrics.twHolding;
-    const foreign = smMetrics.foreignHolding + wlMetrics.foreignHolding;
-    const total = tw + foreign;
+    const allocation = regionalAllocation(
+      smMetrics.twAllocated + wlMetrics.twAllocated,
+      smMetrics.foreignAllocated + wlMetrics.foreignAllocated,
+      0,
+      0,
+    );
     return {
       totalAssets: smMetrics.totalAssets + wlMetrics.totalAssets,
       liabilities: smMetrics.liabilities + wlMetrics.liabilities,
       netAssets: smMetrics.netAssets + wlMetrics.netAssets,
-      twRatio: total ? ((tw * 100) / total).toFixed(1) : "0.0",
-      foreignRatio: total ? ((foreign * 100) / total).toFixed(1) : "0.0",
+      twRatio: allocation.twRatio,
+      foreignRatio: allocation.foreignRatio,
     };
   }, [smMetrics, wlMetrics]);
 
@@ -1713,7 +1713,7 @@ export default function SimulatorApp({ baseline }: { baseline: number }) {
 
         <section className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
           <div className="metric-card border-slate-700">
-            <p>1. 台灣 / 國外配置比例</p>
+            <p title="依目前國內證券、房地產、汽車與國外證券市值計算；不含閒置現金、負債及預計加碼。">1. 台灣 / 國外配置比例（含房車）</p>
             <div className="flex items-center justify-between gap-1 text-sm font-black tracking-tight sm:text-xl">
               <span className="text-indigo-600">TW {global.twRatio}%</span>
               <span className="text-slate-300">|</span>
