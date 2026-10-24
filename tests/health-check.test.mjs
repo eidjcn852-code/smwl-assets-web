@@ -142,3 +142,25 @@ test('simulator excludes 00865B from all exposure numerators but keeps asset val
     assert.ok(simulated.dataNotes.some(note=>note.includes('00865B')));
   }
 });
+
+test('00865B loses exactly 10% in all five scenarios regardless of region, ticker alias or leverage', () => {
+  for (const market of ['tw', 'foreign']) {
+    for (const name of ['00865B', 'TWSE:00865B', '00865B.TW']) {
+      for (const leverage of [1, 2, 5]) {
+        const result = check(input({
+          accounts: [account({ cash: 0, marginLoan: 200 })],
+          positions: [position({ name, market, leverage })],
+        }), { excludedExposureTickers: ['00865B'] });
+        assert.equal(result.stressTests.length, 5);
+        for (const scenario of result.stressTests) {
+          assert.equal(scenario.estimatedLoss, 100);
+          assert.equal(scenario.netAssetsAfter, 700);
+          assert.equal(scenario.drawdownPct, 12.5);
+          assert.equal(scenario.estimatedMaintenanceRatio, 450);
+          assert.equal(scenario.currentRatioAfter, 450);
+          assert.equal(scenario.exposureMultipleAfter, 0);
+        }
+      }
+    }
+  }
+});

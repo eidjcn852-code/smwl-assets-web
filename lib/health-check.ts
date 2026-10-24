@@ -557,27 +557,27 @@ export const buildDeterministicHealthCheck = (
     {
       scenario: "2000 網路泡沫",
       shocks: { tw: 0.662, foreign: 0.4741, realEstate: 0.1 },
-      positionShocks: { "00631L": 0.95 },
+      positionShocks: { "00631L": 0.95, "00865B": 0.1 },
     },
     {
       scenario: "2008 全球金融海嘯",
       shocks: { tw: 0.583, foreign: 0.5525, realEstate: 0.2 },
-      positionShocks: { "00631L": 0.85 },
+      positionShocks: { "00631L": 0.85, "00865B": 0.1 },
     },
     {
       scenario: "2015 中國股災與全球市場震盪",
       shocks: { tw: 0.281, foreign: 0.12, realEstate: 0.05 },
-      positionShocks: { "00631L": 0.459 },
+      positionShocks: { "00631L": 0.459, "00865B": 0.1 },
     },
     {
       scenario: "2020 COVID 急跌",
       shocks: { tw: 0.287, foreign: 0.338, realEstate: 0.05 },
-      positionShocks: { "00631L": 0.5341 },
+      positionShocks: { "00631L": 0.5341, "00865B": 0.1 },
     },
     {
       scenario: "2022 通膨升息熊市",
       shocks: { tw: 0.316, foreign: 0.254, realEstate: 0.1 },
-      positionShocks: { "00631L": 0.5169 },
+      positionShocks: { "00631L": 0.5169, "00865B": 0.1 },
     },
   ];
   const stressTests = stressDefinitions.map((definition) =>

@@ -54,6 +54,7 @@ test('production health check excludes 00865B from current and stressed exposure
   assert.equal(result.analysis.domains.find(domain => domain.label === '槓桿與質押').value, '0.00 倍');
   assert.equal(result.analysis.metrics.find(metric => metric.label === '目前總資產').value, '$1,100');
   assert.ok(result.analysis.stressTests.every(scenario => scenario.exposureMultipleAfter === 0));
+  assert.deepEqual(result.analysis.stressTests.map(scenario => scenario.estimatedLoss), [10, 10, 10, 10, 10]);
 });
 test('read retries transient failures; conflicting save does not write; token stays in memory', async () => {
   const storage = new Map();

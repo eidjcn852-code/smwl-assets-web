@@ -67,4 +67,5 @@ test('simulator health route applies its own 00865B exposure rule',async()=>{
   const result=await (await api.pagesFetch('/api/health-check',{method:'POST',body:JSON.stringify(payload)})).json();
   assert.equal(result.analysis.domains.find(d=>d.label==='槓桿與質押').value,'0.00 倍');
   assert.equal(result.analysis.metrics.find(m=>m.label==='目前總資產').value,'$1,100');
+  assert.deepEqual(result.analysis.stressTests.map(scenario=>scenario.estimatedLoss),[10,10,10,10,10]);
 });

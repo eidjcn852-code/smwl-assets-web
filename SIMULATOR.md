@@ -4,6 +4,7 @@ Entry: `/smwl-assets-web/simulator/`. It remains independent from the original `
 
 - Manual prices and editable accounts; charts, leverage, planned additions and deterministic health checks are retained.
 - 00865B counts towards assets, net worth, concentration, collateral value and stress losses, but is omitted from current, planned and stress exposure numerators. Both the simulator and production account totals and health checks now apply this rule.
+- All five stress scenarios apply a fixed 10% loss to 00865B in both entries, regardless of its region or entered leverage. Scenario explanations and loss formulas show this assumption.
 - Liabilities have one region-neutral section per account in both entries. Existing domestic and foreign pledge/general debt values merge on import or load without changing the total owed; the production spreadsheet retains its legacy field names for compatibility.
 - Existing monthly leverage snapshots are left as recorded; future production snapshots use the updated 00865B exposure rule.
 - Regional allocation includes current domestic securities, property and car values on the TW side, and current overseas securities on the foreign side. Cash, debt and planned additions are unallocated. The production dashboard uses the same allocation rule.
